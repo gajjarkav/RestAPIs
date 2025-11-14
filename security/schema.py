@@ -1,5 +1,4 @@
 from pydantic import BaseModel
-from typing import Optional
 
 class PasswordGenSchema(BaseModel):
     length: int = 12
@@ -8,4 +7,6 @@ class PasswordGenSchema(BaseModel):
     digits: bool = True
     symbols: bool = True
 
-    
+
+class PasswordStrengthSchema(BaseModel):
+    password: str

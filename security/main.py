@@ -1,10 +1,11 @@
 from fastapi import FastAPI, HTTPException
-from schema import PasswordGenSchema
+from schema import PasswordGenSchema, PasswordStrengthSchema
 from psswrd_generator import generate
+from psswrd_strength import check
 app = FastAPI(
     title= "Security APIs",
-    description="basic security apis with password generator endpoint",
-    version="1.0"
+    description="basic security apis with password generator endpoint and password strength checker",
+    version="1.1"
 )
 
 
@@ -20,5 +21,13 @@ async def password_generator(data: PasswordGenSchema):
         )
         return {"password": password}
 
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/password-strength")
+async def password_strength(data: PasswordStrengthSchema):
+    try:
+        result = check(data.password)
+        return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
