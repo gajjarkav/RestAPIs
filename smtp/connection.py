@@ -1,4 +1,4 @@
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 import aiosmtplib
 from email.message import EmailMessage
 from config import settings
@@ -8,7 +8,7 @@ smtp_port = settings.SMTP_PORT
 username = settings.SMTP_USER
 password = settings.SMTP_PASSWORD
 
-@contextmanager
+@asynccontextmanager
 async def connection():
     smtp = aiosmtplib.SMTP(
         hostname=smtp_host,
