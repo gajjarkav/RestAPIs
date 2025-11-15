@@ -1,12 +1,19 @@
+from config import settings
+
 from fastapi import FastAPI, HTTPException
-from schema import PasswordGenSchema, PasswordStrengthSchema
-from psswrd_generator import generate
-from psswrd_strength import check
+from schema import *
+import re
 from datetime import datetime, timedelta
+import string
+import secrets
+import random
+import smtplib
+from email.mime.multipart import MIMEMultipart
 
 import uuid
-import secrets
 import base64
+
+from smtp.config import settings
 
 token_db = {}
 app = FastAPI(
@@ -16,6 +23,95 @@ app = FastAPI(
 )
 
 
+def generate(length: int, uppercase: bool, lowercase: bool, digits: bool, symbols: bool) -> str:
+    chars = ""
+
+    if uppercase:
+        chars += string.ascii_uppercase
+    if lowercase:
+        chars += string.ascii_lowercase
+    if digits:
+        chars += string.digits
+    if symbols:
+        chars += string.punctuation
+
+    if not chars:
+        raise ValueError("chars cannot be empty")
+
+    password = ''.join(secrets.choice(chars) for _ in range(length))
+
+    return password
+
+common = {"password", "qwerty", "admin", "admin123", "1234567890", "123456"}
+
+def seq_check(pwd: str) -> bool:
+    sequences = ["123", "qwe", "abc"]
+    return any(seq in pwd .lower() for seq in sequences)
+def check(password: str) -> dict:
+    score = 0
+    feedback = []
+
+    if len(password) < 8:
+        feedback.append("You need at least 8 characters long password for more strength")
+
+    if len(password) >= 8:
+        score += 1
+        feedback.append("Good Length of Password")
+
+    if len(password) >= 12:
+        score += 1
+        feedback.append("Very Good Length of Password")
+
+    if re.search(f"[a-z]", password):
+        score += 1
+    else:
+        feedback.append("TIP: add lowercase letters")
+
+    if re.search(r"[A-Z]", password):
+        score += 1
+    else:
+        feedback.append("TIP: add uppercase letters")
+
+    if re.search(r"[0-9]", password):
+        score += 1
+    else:
+        feedback.append("TIP: add numbers")
+
+    if re.search(r"[^A-Za-z0-9]", password):
+        score += 1
+    else:
+        feedback.append("TIP: add special characters")
+
+
+    if not any(word in password.lower() for word in common):
+        score += 1
+    else:
+        feedback.append("TIP: try to use different password ignore common passwords")
+
+    if not re.findall(r"(.)\1{2,}", password):
+        score += 1
+    else :
+        feedback.append("TIP: try to avoid repeated chars")
+
+    if not seq_check(password):
+        score += 1
+    else:
+        feedback.append("TIP: try to avoid common sequence in password")
+
+    if score <= 3:
+        strength = "Weak"
+    elif score <= 6:
+        strength = "Medium"
+    elif score <= 8:
+        strength = "Strong"
+    else:
+        strength = "Very Strong"
+
+    return {
+        "score": score,
+        "strength": strength,
+        "feedback": feedback
+    }
 @app.post("/password-generator")
 async def password_generator(data: PasswordGenSchema):
     try:
@@ -50,7 +146,7 @@ def token_generate(token_type: str, expires_in: int):
     elif token_type == "jwt":
         header = base64.urlsafe_b64encode(b'{"alg":"none"}').decode()
         payload = base64.urlsafe_b64encode(f'{{"exp": {int(datetime.now().timestamp()) + expires_in}}}'.encode()).decode()
-        token = header + "." + payload + "."
+        token = header + "." + payload
 
     else:
         raise HTTPException(400, "Invalid Token type")
@@ -96,3 +192,59 @@ def revoke_token(token: str):
 @app.get("/list")
 def token_list():
     return token_db
+
+
+otp_db = {}
+def generate_otp():
+    return str(random.randint(100000, 999999))
+
+def send_mail(email: str,otp: str):
+    msg = MIMEMultipart()
+    msg["From"] = settings.ADMIN_MAIL
+    msg["To"] = email
+    msg["Subject"] = "OTP"
+    msg.attach(MIMEText(otp, "plain"))
+
+    try:
+        server = smtplib.SMTP(host=settings.SMTP_SERVER, port=settings.SMTP_PORT)
+        server.starttls()
+        server.login(settings.ADMIN_MAIL, settings.ADMIN_PASSWORD)
+        server.sendmail(settings.ADMIN_MAIL, email, msg.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/send-otp")
+def send_otp(data: OtpSchema):
+    otp = generate_otp()
+    sent = send_mail(data.email, otp)
+    if not sent :
+        raise HTTPException(status_code=400, detail="OTP Failed")
+
+    otp_db[data.email] = {
+        "otp": otp,
+        "created_at": datetime.utcnow().isoformat(),
+        "expires_in": datetime.utcnow() + timedelta(minutes=5),
+        "status": "active"
+    }
+    return {"message": "otp sent successfully"}
+
+
+@app.post("/verify-otp")
+def verify(data : OtpVerifySchema):
+    if data.email not in otp_db:
+        raise HTTPException(status_code=404, detail="Email not found")
+
+    otp_data = otp_db[data.email]
+
+    if datetime.utcnow() > otp_data["expires_in"]:
+        otp_data["status"] = "expired"
+        raise HTTPException(status_code=400, detail="OTP Expired")
+
+    if otp_data["otp"] != data.otp:
+        return {"valid": False, "Reason": "invalid otp"}
+
+    otp_data["status"] = "verified"
+    return {"valid": True, "details": otp_data}
+

@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
+
 
 class PasswordGenSchema(BaseModel):
     length: int = 12
@@ -10,3 +11,10 @@ class PasswordGenSchema(BaseModel):
 
 class PasswordStrengthSchema(BaseModel):
     password: str
+
+class OtpSchema(BaseModel):
+    email: EmailStr
+
+class OtpVerifySchema(BaseModel):
+    email: EmailStr
+    otp: str
