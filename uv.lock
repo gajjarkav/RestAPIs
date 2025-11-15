@@ -535,6 +535,7 @@ dependencies = [
     { name = "fastapi", extra = ["all"] },
     { name = "pydantic", extra = ["email"] },
     { name = "pydantic-settings" },
+    { name = "python-multipart" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -544,6 +545,7 @@ requires-dist = [
     { name = "fastapi", extras = ["all"], specifier = ">=0.121.1" },
     { name = "pydantic", extras = ["email"], specifier = ">=2.12.4" },
     { name = "pydantic-settings", specifier = ">=2.12.0" },
+    { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.38.0" },
 ]
 
